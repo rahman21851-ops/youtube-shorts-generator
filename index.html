@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTube Shorts Generator</title>
+
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      margin: 0;
+      padding: 16px;
+    }
+
+    main {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    p {
+      color: #94a3b8;
+      margin-top: 0;
+    }
+
+    .card,
+    .short {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 12px;
+      color: #cbd5e1;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    input,
+    select,
+    button {
+      width: 100%;
+      margin-top: 6px;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #374151;
+      background: #0b1220;
+      color: #e5e7eb;
+      outline: none;
+    }
+
+    button {
+      background: #38bdf8;
+      color: #082f49;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .error {
+      display: none;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fecaca;
+      white-space: pre-wrap;
+    }
+
+    #resultsTitle {
+      display: none;
+      color: #ffffff;
+      margin: 20px 0 12px;
+    }
+
+    .short-title {
+      color: #ffffff;
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .time {
+      color: #38bdf8;
+      font-weight: bold;
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .transcript {
+      color: #cbd5e1;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      margin-bottom: 10px;
+    }
+
+    .meta,
+    .reason,
+    .tags {
+      color: #94a3b8;
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 8px;
+    }
+
+    .tags {
+      color: #a78bfa;
+      word-break: break-word;
+    }
+
+    pre {
+      background: #0b1220;
+      border: 1px solid #334155;
+      color: #93c5fd;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      margin-bottom: 10px;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .actions button {
+      background: #1f2937;
+      color: #e5e7eb;
+      border: 1px solid #374151;
+    }
+
+    @media (max-width: 600px) {
+      .actions {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>YouTube Shorts Generator</h1>
+    <p>
+      Paste a YouTube link, choose a content theme, and get Shorts ideas with
+      timestamps, titles, hashtags, and FFmpeg commands.
+    </p>
+
+    <div class="card">
+      <label>
+        YouTube URL
+        <input
+          id="youtubeUrl"
+          type="text"
+          placeholder="https://www.youtube.com/watch?v=..."
+        />
+      </label>
+
+      <label>
+        Content Theme
+        <select id="ideology">
+          <option value="general">General</option>
+          <option value="motivation">Motivation</option>
+          <option value="business">Business</option>
+          <option value="finance">Finance</option>
+          <option value="education">Education</option>
+          <option value="tech">Tech</option>
+          <option value="storytelling">Storytelling</option>
+          <option value="custom">Custom Keywords</option>
+        </select>
+      </label>
+
+      <label>
+        Custom Keywords
+        <input
+          id="customKeywords"
+          type="text"
+          placeholder="money, discipline, startup"
+        />
+      </label>
+
+      <label>
+        Number of Shorts
+        <select id="numberOfShorts">
+          <option value="1">1</option>
+          <option value="3" selected>3</option>
+          <option value="5">5</option>
+          <option value="8">8</option>
+          <option value="10">10</option>
+        </select>
+      </label>
+
+      <label>
+        Target Length
+        <select id="maxSeconds">
+          <option value="30">Around 30 seconds</option>
+          <option value="45" selected>Around 45 seconds</option>
+          <option value="60">Around 60 seconds</option>
+        </select>
+      </label>
+
+      <button id="generateBtn" onclick="generateShorts()">
+        Generate Shorts Ideas
+      </button>
+
+      <div id="errorBox" class="error"></div>
+    </div>
+
+    <h2 id="resultsTitle">Generated Shorts</h2>
+    <div id="results"></div>
+  </main>
+
+  <script>
+    let currentShorts = [];
+
+    async function generateShorts() {
+      const youtubeUrl = document.getElementById("youtubeUrl").value.trim();
+      const ideology = document.getElementById("ideology").value;
+      const customKeywords = document.getElementById("customKeywords").value.trim();
+      const numberOfShorts = document.getElementById("numberOfShorts").value;
+      const maxSeconds = document.getElementById("maxSeconds").value;
+
+      const errorBox = document.getElementById("errorBox");
+      const results = document.getElementById("results");
+      const resultsTitle = document.getElementById("resultsTitle");
+      const generateBtn = document.getElementById("generateBtn");
+
+      errorBox.style.display = "none";
+      errorBox.textContent = "";
+      results.innerHTML = "";
+      resultsTitle.style.display = "none";
+
+      if (!youtubeUrl) {
+        errorBox.textContent = "Please enter a YouTube URL.";
+        errorBox.style.display = "block";
+        return;
+      }
+
+      generateBtn.disabled = true;
+      generateBtn.textContent = "Processing...";
+
+      try {
+        const response = await fetch("/api/generate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            youtubeUrl,
+            ideology,
+            customKeywords,
+            numberOfShorts: Number(numberOfShorts),
+            maxSeconds: Number(maxSeconds)
+          })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Something went wrong.");
+        }
+
+        renderResults(data);
+      } catch (error) {
+        errorBox.textContent = error.message;
+        errorBox.style.display = "block";
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = "Generate Shorts Ideas";
+      }
+    }
+
+    function renderResults(data) {
+      const results = document.getElementById("results");
+      const resultsTitle = document.getElementById("resultsTitle");
+
+      currentShorts = data.shorts || [];
+
+      if (!currentShorts.length) {
+        results.innerHTML = '<div class="card">No shorts found.</div>';
+        return;
+      }
+
+      resultsTitle.style.display = "block";
+
+      currentShorts.forEach((short, index) => {
+        const card = document.createElement("div");
+        card.className = "short";
+
+        card.innerHTML = `
+          <div class="short-title">${escapeHtml(short.title)}</div>
+
+          <div class="time">
+            ${short.startTime} - ${short.endTime}
+          </div>
+
+          <div class="transcript">${escapeHtml(short.transcript)}</div>
+
+          <div class="meta">
+            Duration: ${short.durationSeconds}s | Score: ${short.score}
+          </div>
+
+          <div class="reason">${escapeHtml(short.reason)}</div>
+
+          <div class="tags">${escapeHtml(short.hashtags)}</div>
+
+          <pre>${escapeHtml(short.ffmpegCommand)}</pre>
+
+          <div class="actions">
+            <button data-copy="title" data-index="${index}">Copy Title</button>
+            <button data-copy="transcript" data-index="${index}">Copy Transcript</button>
+            <button data-copy="hashtags" data-index="${index}">Copy Hashtags</button>
+            <button data-copy="ffmpeg" data-index="${index}">Copy FFmpeg</button>
+          </div>
+        `;
+
+        results.appendChild(card);
+      });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    document.addEventListener("click", async event => {
+      const button = event.target.closest("[data-copy]");
+
+      if (!button) return;
+
+      const index = Number(button.dataset.index);
+      const type = button.dataset.copy;
+      const short = currentShorts[index];
+
+      if (!short) return;
+
+      let textToCopy = "";
+
+      if (type === "title") {
+        textToCopy = short.title;
+      } else if (type === "transcript") {
+        textToCopy = short.transcript;
+      } else if (type === "hashtags") {
+        textToCopy = short.hashtags;
+      } else if (type === "ffmpeg") {
+        textToCopy = short.ffmpegCommand;
+      }
+
+      try {
+        await navigator.clipboard.writeText(textToCopy);
+
+        const originalText =
+          button.dataset.originalText || button.textContent.trim();
+
+        button.dataset.originalText = originalText;
+        button.textContent = "Copied";
+
+        setTimeout(() => {
+          button.textContent = originalText;
+        }, 1200);
+      } catch {
+        alert("Copy failed. Please copy manually.");
+      }
+    });
+  </script>
+</body>
+</html>
