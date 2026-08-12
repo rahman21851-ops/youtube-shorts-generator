@@ -236,8 +236,26 @@ function parseManualTranscript(rawText) {
       if (text) items.push({ text, offset: start * 1000, duration: 4000 });
       fallbackStart = start + 4;
     } else {
-      items.push({ text: line, offset: fallbackStart * 1000, duration: 4000 });
-      fallbackStart += 4;
+      // No timestamps: split into sentences and estimate speaking time
+      const sentences = line.match(/[^.!?]+[.!?]*/g) || [line];
+
+      for (const sentence of sentences) {
+        const clean = sentence.trim();
+        const words = clean.split(/\s+/).filter(Boolean).length;
+
+        if (!words) continue;
+
+        // average speaking speed ≈ 2.5 words per second
+        const duration = Math.max(2, words / 2.5);
+
+        items.push({
+          text: clean,
+          offset: fallbackStart * 1000,
+          duration: duration * 1000
+        });
+
+        fallbackStart += duration;
+      }
     }
   }
 
