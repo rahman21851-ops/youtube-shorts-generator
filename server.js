@@ -261,16 +261,29 @@ function escapeRegex(string) {
 }
 
 async function getTranscript(videoId) {
-  const { YoutubeTranscript } = await import("youtube-transcript");
+  const mod = await import("youtube-transcript");
+
+  const YoutubeTranscript =
+    mod.YoutubeTranscript ||
+    (mod.default && mod.default.YoutubeTranscript) ||
+    mod.default;
+
   return YoutubeTranscript.fetchTranscript(videoId);
 }
 
 function normalizeTranscript(rawTranscript) {
+  const looksLikeMilliseconds = rawTranscript.some(
+    item => Number(item.duration ?? 0) > 60
+  );
+
+  const toSeconds = value =>
+    looksLikeMilliseconds ? Number(value) / 1000 : Number(value);
+
   return rawTranscript
     .map(item => {
       const text = (item.text || "").replace(/\s+/g, " ").trim();
-      const start = Number(item.offset ?? item.start ?? 0);
-      const duration = Number(item.duration ?? 4);
+      const start = toSeconds(item.offset ?? item.start ?? 0);
+      const duration = toSeconds(item.duration ?? 4);
 
       return {
         text,
