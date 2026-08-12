@@ -345,6 +345,156 @@ async function fetchTranscriptViaInnerTube(videoId) {
   throw new Error("No captions found");
 }
 
+function decodeHtmlEntities(text) {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&\#(\d+);/g, (match, code) => String.fromCharCode(Number(code)));
+}
+
+async function fetchViaInnerTube(videoId) {
+  const clients = [
+    {
+      clientName: "ANDROID",
+      clientVersion: "19.09.37",
+      userAgent:
+        "com.google.android.youtube/19.09.37 (Linux; U; Android 13) gzip"
+    },
+    {
+      clientName: "IOS",
+      clientVersion: "19.09.3",
+      userAgent:
+        "com.google.ios.youtube/19.09.3 (iPhone16,2; U; CPU iOS 17_0 like Mac OS X)"
+    },
+    {
+      clientName: "WEB",
+      clientVersion: "2.20240101.00.00",
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+  ];
+
+  for (const client of clients) {
+    try {
+      const response = await fetch(
+        "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": client.userAgent
+          },
+          body: JSON.stringify({
+            context: {
+              client: {
+                clientName: client.clientName,
+                clientVersion: client.clientVersion,
+                hl: "en"
+              }
+            },
+            videoId
+          })
+        }
+      );
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+
+      const tracks =
+        data &&
+        data.captions &&
+        data.captions.playerCaptionsTracklistRenderer &&
+        data.captions.playerCaptionsTracklistRenderer.captionTracks;
+
+      if (!tracks || !tracks.length) continue;
+
+      const track =
+        tracks.find(t => !t.kind || t.kind !== "asr") || tracks[0];
+
+      if (!track.baseUrl) continue;
+
+      const separator = track.baseUrl.includes("?") ? "&" : "?";
+
+      const captionResponse = await fetch(
+        track.baseUrl + separator + "fmt=json3"
+      );
+
+      if (!captionResponse.ok) continue;
+
+      const captionData = await captionResponse.json();
+      const events = captionData.events || [];
+
+      const transcript = events
+        .filter(event => event.segs)
+        .map(event => ({
+          text: event.segs.map(seg => seg.utf8 || "").join(""),
+          offset: event.tStartMs || 0,
+          duration: event.dDurationMs || 2000
+        }))
+        .filter(item => item.text.trim().length > 0);
+
+      if (transcript.length) return transcript;
+    } catch (error) {
+      // try next client
+    }
+  }
+
+  return null;
+}
+
+async function fetchViaLegacyTimedText(videoId) {
+  const langs = ["en", "hi", "ur", "ar"];
+
+  for (const lang of langs) {
+    try {
+      const response = await fetch(
+        `https://video.google.com/timedtext?v=${videoId}&lang=${lang}`,
+        {
+          headers: { "User-Agent": "Mozilla/5.0" }
+        }
+      );
+
+      if (!response.ok) continue;
+
+      const xml = await response.text();
+
+      if (!xml || !xml.includes("<text")) continue;
+
+      const items = [];
+
+      const regex = /<text start="([0-9.]+)"(?:\s+dur="([0-9.]+)")?[^>]*>([\s\S]*?)<\/text>/g;
+
+      let match;
+
+      while ((match = regex.exec(xml)) !== null) {
+        const start = parseFloat(match[1]);
+        const duration = match[2] ? parseFloat(match[2]) : 4;
+        const text = decodeHtmlEntities(match[3])
+          .replace(/\s+/g, " ")
+          .trim();
+
+        if (text) {
+          items.push({
+            text,
+            offset: start * 1000,
+            duration: duration * 1000
+          });
+        }
+      }
+
+      if (items.length) return items;
+    } catch (error) {
+      // try next language
+    }
+  }
+
+  return null;
+}
+
 async function getTranscript(videoId) {
   // Method 1: npm package
   try {
@@ -359,11 +509,32 @@ async function getTranscript(videoId) {
 
     if (result && result.length) return result;
   } catch (error) {
-    console.log("Package method failed, using fallback:", error.message);
+    console.log("Method 1 failed:", error.message);
   }
 
-  // Method 2: YouTube InnerTube API
-  return fetchTranscriptViaInnerTube(videoId);
+  // Method 2: YouTube InnerTube API (Android/iOS/Web)
+  try {
+    const innerTubeResult = await fetchViaInnerTube(videoId);
+
+    if (innerTubeResult && innerTubeResult.length) {
+      return innerTubeResult;
+    }
+  } catch (error) {
+    console.log("Method 2 failed:", error.message);
+  }
+
+  // Method 3: legacy timedtext endpoint
+  try {
+    const legacyResult = await fetchViaLegacyTimedText(videoId);
+
+    if (legacyResult && legacyResult.length) {
+      return legacyResult;
+    }
+  } catch (error) {
+    console.log("Method 3 failed:", error.message);
+  }
+
+  throw new Error("No captions found");
 }
 function normalizeTranscript(rawTranscript) {
   const looksLikeMilliseconds = rawTranscript.some(
