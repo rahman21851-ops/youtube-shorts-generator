@@ -214,6 +214,15 @@
           <option value="60">Around 60 seconds</option>
         </select>
       </label>
+      <label>
+        Paste Transcript (optional — use if auto fetch fails)
+        <textarea
+          id="manualTranscript"
+          rows="4"
+          style="width:100%;margin-top:6px;padding:12px;border-radius:10px;border:1px solid #374151;background:#0b1220;color:#e5e7eb;min-height:90px;outline:none"
+          placeholder="Optional: copy transcript from YouTube (with timestamps) and paste here"
+        ></textarea>
+      </label>
 
       <button id="generateBtn" onclick="generateShorts()">
         Generate Shorts Ideas
@@ -235,6 +244,7 @@
       const customKeywords = document.getElementById("customKeywords").value.trim();
       const numberOfShorts = document.getElementById("numberOfShorts").value;
       const maxSeconds = document.getElementById("maxSeconds").value;
+      const manualTranscript = document.getElementById("manualTranscript").value;
 
       const errorBox = document.getElementById("errorBox");
       const results = document.getElementById("results");
@@ -266,7 +276,8 @@
             ideology,
             customKeywords,
             numberOfShorts: Number(numberOfShorts),
-            maxSeconds: Number(maxSeconds)
+            maxSeconds: Number(maxSeconds),
+            manualTranscript
           })
         });
 
