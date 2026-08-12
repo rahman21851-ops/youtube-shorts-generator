@@ -260,17 +260,111 @@ function escapeRegex(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function getTranscript(videoId) {
-  const mod = await import("youtube-transcript");
+async function fetchTranscriptViaInnerTube(videoId) {
+  const clients = [
+    {
+      clientName: "ANDROID",
+      clientVersion: "19.09.37",
+      userAgent:
+        "com.google.android.youtube/19.09.37 (Linux; U; Android 13) gzip"
+    },
+    {
+      clientName: "WEB",
+      clientVersion: "2.20240101.00.00",
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+  ];
 
-  const YoutubeTranscript =
-    mod.YoutubeTranscript ||
-    (mod.default && mod.default.YoutubeTranscript) ||
-    mod.default;
+  for (const client of clients) {
+    try {
+      const response = await fetch(
+        "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": client.userAgent
+          },
+          body: JSON.stringify({
+            context: {
+              client: {
+                clientName: client.clientName,
+                clientVersion: client.clientVersion,
+                hl: "en"
+              }
+            },
+            videoId
+          })
+        }
+      );
 
-  return YoutubeTranscript.fetchTranscript(videoId);
+      if (!response.ok) continue;
+
+      const data = await response.json();
+
+      const tracks =
+        data &&
+        data.captions &&
+        data.captions.playerCaptionsTracklistRenderer &&
+        data.captions.playerCaptionsTracklistRenderer.captionTracks;
+
+      if (!tracks || !tracks.length) continue;
+
+      const track =
+        tracks.find(t => !t.kind || t.kind !== "asr") || tracks[0];
+
+      const baseUrl = track.baseUrl;
+
+      if (!baseUrl) continue;
+
+      const separator = baseUrl.includes("?") ? "&" : "?";
+
+      const captionResponse = await fetch(baseUrl + separator + "fmt=json3");
+
+      if (!captionResponse.ok) continue;
+
+      const captionData = await captionResponse.json();
+      const events = captionData.events || [];
+
+      const transcript = events
+        .filter(event => event.segs)
+        .map(event => ({
+          text: event.segs.map(seg => seg.utf8 || "").join(""),
+          offset: event.tStartMs || 0,
+          duration: event.dDurationMs || 2000
+        }))
+        .filter(item => item.text.trim().length > 0);
+
+      if (transcript.length) return transcript;
+    } catch (error) {
+      // try next client
+    }
+  }
+
+  throw new Error("No captions found");
 }
 
+async function getTranscript(videoId) {
+  // Method 1: npm package
+  try {
+    const mod = await import("youtube-transcript");
+
+    const YoutubeTranscript =
+      mod.YoutubeTranscript ||
+      (mod.default && mod.default.YoutubeTranscript) ||
+      mod.default;
+
+    const result = await YoutubeTranscript.fetchTranscript(videoId);
+
+    if (result && result.length) return result;
+  } catch (error) {
+    console.log("Package method failed, using fallback:", error.message);
+  }
+
+  // Method 2: YouTube InnerTube API
+  return fetchTranscriptViaInnerTube(videoId);
+}
 function normalizeTranscript(rawTranscript) {
   const looksLikeMilliseconds = rawTranscript.some(
     item => Number(item.duration ?? 0) > 60
