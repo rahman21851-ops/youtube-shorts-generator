@@ -1021,19 +1021,24 @@ app.post("/api/generate", async (req, res) => {
       });
     }
 
-    let rawTranscript;
+    let transcript;
 
-    try {
-      rawTranscript = await getTranscript(videoId);
-    } catch {
-      return res.status(400).json({
-        error:
-          "Could not fetch captions. Make sure the video has captions/transcript available."
-      });
+    if (manualTranscript && manualTranscript.trim()) {
+      transcript = normalizeTranscript(parseManualTranscript(manualTranscript));
+    } else {
+      let rawTranscript;
+
+      try {
+        rawTranscript = await getTranscript(videoId);
+      } catch {
+        return res.status(400).json({
+          error:
+            "Auto fetch failed (YouTube blocks server IPs). Paste the transcript manually and try again."
+        });
+      }
+
+      transcript = normalizeTranscript(rawTranscript);
     }
-
-    const transcript = normalizeTranscript(rawTranscript);
-
     if (!transcript.length) {
       return res.status(400).json({
         error: "No usable transcript found for this video."
