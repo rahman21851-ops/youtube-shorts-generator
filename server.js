@@ -1009,7 +1009,8 @@ app.post("/api/generate", async (req, res) => {
       ideology = "general",
       customKeywords = "",
       numberOfShorts = 3,
-      maxSeconds = 45
+      maxSeconds = 45,
+      manualTranscript = ""
     } = req.body;
 
     const videoId = extractVideoId(youtubeUrl);
