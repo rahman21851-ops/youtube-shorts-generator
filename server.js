@@ -5,7 +5,7 @@ const path = require("path");
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
@@ -71,185 +71,64 @@ const IDEOLOGIES = {
   general: {
     label: "General",
     keywords: [
-      "how",
-      "why",
-      "what",
-      "secret",
-      "truth",
-      "mistake",
-      "lesson",
-      "important",
-      "nobody",
-      "everyone",
-      "stop",
-      "start",
-      "never",
-      "always",
-      "success",
-      "life",
-      "people",
-      "mind",
-      "idea",
-      "story"
+      "how", "why", "what", "secret", "truth", "mistake", "lesson",
+      "important", "nobody", "everyone", "stop", "start", "never",
+      "always", "success", "life", "people", "mind", "idea", "story"
     ]
   },
-
   motivation: {
     label: "Motivation",
     keywords: [
-      "discipline",
-      "mindset",
-      "success",
-      "goal",
-      "dream",
-      "failure",
-      "hard work",
-      "consistency",
-      "focus",
-      "believe",
-      "habit",
-      "growth",
-      "pain",
-      "win",
-      "lose",
-      "strong",
-      "future",
-      "lazy",
-      "action",
-      "energy"
+      "discipline", "mindset", "success", "goal", "dream", "failure",
+      "hard work", "consistency", "focus", "believe", "habit", "growth",
+      "pain", "win", "lose", "strong", "future", "lazy", "action", "energy"
     ]
   },
-
   business: {
     label: "Business",
     keywords: [
-      "business",
-      "startup",
-      "customer",
-      "market",
-      "product",
-      "sales",
-      "money",
-      "profit",
-      "brand",
-      "strategy",
-      "growth",
-      "founder",
-      "entrepreneur",
-      "value",
-      "offer",
-      "pricing",
-      "audience",
-      "marketing",
-      "scale",
-      "leverage"
+      "business", "startup", "customer", "market", "product", "sales",
+      "money", "profit", "brand", "strategy", "growth", "founder",
+      "entrepreneur", "value", "offer", "pricing", "audience",
+      "marketing", "scale", "leverage"
     ]
   },
-
   finance: {
     label: "Finance",
     keywords: [
-      "money",
-      "invest",
-      "investment",
-      "saving",
-      "savings",
-      "income",
-      "wealth",
-      "rich",
-      "poor",
-      "budget",
-      "debt",
-      "interest",
-      "compound",
-      "asset",
-      "liability",
-      "cashflow",
-      "salary",
-      "finance",
-      "financial",
+      "money", "invest", "investment", "saving", "savings", "income",
+      "wealth", "rich", "poor", "budget", "debt", "interest", "compound",
+      "asset", "liability", "cashflow", "salary", "finance", "financial",
       "freedom"
     ]
   },
-
   education: {
     label: "Education",
     keywords: [
-      "learn",
-      "learning",
-      "study",
-      "student",
-      "teach",
-      "teacher",
-      "knowledge",
-      "skill",
-      "exam",
-      "school",
-      "college",
-      "degree",
-      "career",
-      "understand",
-      "concept",
-      "explain",
-      "memory",
-      "focus",
-      "practice",
-      "improve"
+      "learn", "learning", "study", "student", "teach", "teacher",
+      "knowledge", "skill", "exam", "school", "college", "degree",
+      "career", "understand", "concept", "explain", "memory", "focus",
+      "practice", "improve"
     ]
   },
-
   tech: {
     label: "Tech",
     keywords: [
-      "ai",
-      "artificial intelligence",
-      "coding",
-      "code",
-      "software",
-      "app",
-      "developer",
-      "programming",
-      "machine",
-      "data",
-      "automation",
-      "robot",
-      "future",
-      "internet",
-      "computer",
-      "technology",
-      "startup",
-      "tool",
-      "product",
-      "digital"
+      "ai", "artificial intelligence", "coding", "code", "software",
+      "app", "developer", "programming", "machine", "data", "automation",
+      "robot", "future", "internet", "computer", "technology", "startup",
+      "tool", "product", "digital"
     ]
   },
-
   storytelling: {
     label: "Storytelling",
     keywords: [
-      "story",
-      "happened",
-      "told",
-      "life",
-      "day",
-      "night",
-      "friend",
-      "family",
-      "moment",
-      "changed",
-      "realized",
-      "suddenly",
-      "then",
-      "because",
-      "but",
-      "truth",
-      "secret",
-      "lesson",
-      "experience",
+      "story", "happened", "told", "life", "day", "night", "friend",
+      "family", "moment", "changed", "realized", "suddenly", "then",
+      "because", "but", "truth", "secret", "lesson", "experience",
       "journey"
     ]
   },
-
   custom: {
     label: "Custom",
     keywords: []
@@ -260,245 +139,6 @@ function escapeRegex(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function fetchTranscriptViaInnerTube(videoId) {
-  const clients = [
-    {
-      clientName: "ANDROID",
-      clientVersion: "19.09.37",
-      userAgent:
-        "com.google.android.youtube/19.09.37 (Linux; U; Android 13) gzip"
-    },
-    {
-      clientName: "WEB",
-      clientVersion: "2.20240101.00.00",
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-  ];
-
-  for (const client of clients) {
-    try {
-      const response = await fetch(
-        "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "User-Agent": client.userAgent
-          },
-          body: JSON.stringify({
-            context: {
-              client: {
-                clientName: client.clientName,
-                clientVersion: client.clientVersion,
-                hl: "en"
-              }
-            },
-            videoId
-          })
-        }
-      );
-
-      if (!response.ok) continue;
-
-      const data = await response.json();
-
-      const tracks =
-        data &&
-        data.captions &&
-        data.captions.playerCaptionsTracklistRenderer &&
-        data.captions.playerCaptionsTracklistRenderer.captionTracks;
-
-      if (!tracks || !tracks.length) continue;
-
-      const track =
-        tracks.find(t => !t.kind || t.kind !== "asr") || tracks[0];
-
-      const baseUrl = track.baseUrl;
-
-      if (!baseUrl) continue;
-
-      const separator = baseUrl.includes("?") ? "&" : "?";
-
-      const captionResponse = await fetch(baseUrl + separator + "fmt=json3");
-
-      if (!captionResponse.ok) continue;
-
-      const captionData = await captionResponse.json();
-      const events = captionData.events || [];
-
-      const transcript = events
-        .filter(event => event.segs)
-        .map(event => ({
-          text: event.segs.map(seg => seg.utf8 || "").join(""),
-          offset: event.tStartMs || 0,
-          duration: event.dDurationMs || 2000
-        }))
-        .filter(item => item.text.trim().length > 0);
-
-      if (transcript.length) return transcript;
-    } catch (error) {
-      // try next client
-    }
-  }
-
-  throw new Error("No captions found");
-}
-
-function decodeHtmlEntities(text) {
-  return text
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&\#(\d+);/g, (match, code) => String.fromCharCode(Number(code)));
-}
-
-async function fetchViaInnerTube(videoId) {
-  const clients = [
-    {
-      clientName: "ANDROID",
-      clientVersion: "19.09.37",
-      userAgent:
-        "com.google.android.youtube/19.09.37 (Linux; U; Android 13) gzip"
-    },
-    {
-      clientName: "IOS",
-      clientVersion: "19.09.3",
-      userAgent:
-        "com.google.ios.youtube/19.09.3 (iPhone16,2; U; CPU iOS 17_0 like Mac OS X)"
-    },
-    {
-      clientName: "WEB",
-      clientVersion: "2.20240101.00.00",
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-  ];
-
-  for (const client of clients) {
-    try {
-      const response = await fetch(
-        "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "User-Agent": client.userAgent
-          },
-          body: JSON.stringify({
-            context: {
-              client: {
-                clientName: client.clientName,
-                clientVersion: client.clientVersion,
-                hl: "en"
-              }
-            },
-            videoId
-          })
-        }
-      );
-
-      if (!response.ok) continue;
-
-      const data = await response.json();
-
-      const tracks =
-        data &&
-        data.captions &&
-        data.captions.playerCaptionsTracklistRenderer &&
-        data.captions.playerCaptionsTracklistRenderer.captionTracks;
-
-      if (!tracks || !tracks.length) continue;
-
-      const track =
-        tracks.find(t => !t.kind || t.kind !== "asr") || tracks[0];
-
-      if (!track.baseUrl) continue;
-
-      const separator = track.baseUrl.includes("?") ? "&" : "?";
-
-      const captionResponse = await fetch(
-        track.baseUrl + separator + "fmt=json3"
-      );
-
-      if (!captionResponse.ok) continue;
-
-      const captionData = await captionResponse.json();
-      const events = captionData.events || [];
-
-      const transcript = events
-        .filter(event => event.segs)
-        .map(event => ({
-          text: event.segs.map(seg => seg.utf8 || "").join(""),
-          offset: event.tStartMs || 0,
-          duration: event.dDurationMs || 2000
-        }))
-        .filter(item => item.text.trim().length > 0);
-
-      if (transcript.length) return transcript;
-    } catch (error) {
-      // try next client
-    }
-  }
-
-  return null;
-}
-
-async function fetchViaLegacyTimedText(videoId) {
-  const langs = ["en", "hi", "ur", "ar"];
-
-  for (const lang of langs) {
-    try {
-      const response = await fetch(
-        `https://video.google.com/timedtext?v=${videoId}&lang=${lang}`,
-        {
-          headers: { "User-Agent": "Mozilla/5.0" }
-        }
-      );
-
-      if (!response.ok) continue;
-
-      const xml = await response.text();
-
-      if (!xml || !xml.includes("<text")) continue;
-
-      const items = [];
-
-      const regex = /<text start="([0-9.]+)"(?:\s+dur="([0-9.]+)")?[^>]*>([\s\S]*?)<\/text>/g;
-
-      let match;
-
-      while ((match = regex.exec(xml)) !== null) {
-        const start = parseFloat(match[1]);
-        const duration = match[2] ? parseFloat(match[2]) : 4;
-        const text = decodeHtmlEntities(match[3])
-          .replace(/\s+/g, " ")
-          .trim();
-
-        if (text) {
-          items.push({
-            text,
-            offset: start * 1000,
-            duration: duration * 1000
-          });
-        }
-      }
-
-      if (items.length) return items;
-    } catch (error) {
-      // try next language
-    }
-  }
-
-  return null;
-}
-
-async function getTranscript(videoId) {
-  // Method 1: npm package
-  try {
-    const mod = await import("youtube-transcript");
 function decodeHtmlEntities(text) {
   return text
     .replace(/&amp;/g, "&")
@@ -751,9 +391,10 @@ async function fetchViaInvidious(videoId) {
 
   for (const base of instances) {
     try {
-      const response = await fetch(base + "/api/v1/captions/" + videoId + "?lang=en", {
-        headers: { "User-Agent": "Mozilla/5.0" }
-      });
+      const response = await fetch(
+        base + "/api/v1/captions/" + videoId + "?lang=en",
+        { headers: { "User-Agent": "Mozilla/5.0" } }
+      );
 
       if (!response.ok) continue;
 
@@ -769,7 +410,6 @@ async function fetchViaInvidious(videoId) {
 }
 
 async function getTranscript(videoId) {
-  // Method 1: npm package
   try {
     const mod = await import("youtube-transcript");
 
@@ -785,7 +425,6 @@ async function getTranscript(videoId) {
     console.log("Method 1 failed:", error.message);
   }
 
-  // Method 2: InnerTube API
   try {
     const r = await fetchViaInnerTube(videoId);
     if (r && r.length) return r;
@@ -793,7 +432,6 @@ async function getTranscript(videoId) {
     console.log("Method 2 failed:", error.message);
   }
 
-  // Method 3: legacy timedtext
   try {
     const r = await fetchViaLegacyTimedText(videoId);
     if (r && r.length) return r;
@@ -801,7 +439,6 @@ async function getTranscript(videoId) {
     console.log("Method 3 failed:", error.message);
   }
 
-  // Method 4: Piped mirrors
   try {
     const r = await fetchViaPiped(videoId);
     if (r && r.length) return r;
@@ -809,7 +446,6 @@ async function getTranscript(videoId) {
     console.log("Method 4 failed:", error.message);
   }
 
-  // Method 5: Invidious mirrors
   try {
     const r = await fetchViaInvidious(videoId);
     if (r && r.length) return r;
@@ -819,6 +455,7 @@ async function getTranscript(videoId) {
 
   throw new Error("No captions found");
 }
+
 function normalizeTranscript(rawTranscript) {
   const looksLikeMilliseconds = rawTranscript.some(
     item => Number(item.duration ?? 0) > 60
@@ -1039,6 +676,7 @@ app.post("/api/generate", async (req, res) => {
 
       transcript = normalizeTranscript(rawTranscript);
     }
+
     if (!transcript.length) {
       return res.status(400).json({
         error: "No usable transcript found for this video."
@@ -1052,10 +690,7 @@ app.post("/api/generate", async (req, res) => {
       .map(item => item.trim())
       .filter(Boolean);
 
-    const keywords = [
-      ...selectedIdeology.keywords,
-      ...customKeywordArray
-    ];
+    const keywords = [...selectedIdeology.keywords, ...customKeywordArray];
 
     const targetDuration = Math.min(Number(maxSeconds) || 45, 60);
 
