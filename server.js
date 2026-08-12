@@ -499,6 +499,279 @@ async function getTranscript(videoId) {
   // Method 1: npm package
   try {
     const mod = await import("youtube-transcript");
+function decodeHtmlEntities(text) {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&\#(\d+);/g, (match, code) => String.fromCharCode(Number(code)));
+}
+
+function parseXmlCaptions(xml) {
+  const items = [];
+  const regex = /<text start="([0-9.]+)"(?:\s+dur="([0-9.]+)")?[^>]*>([\s\S]*?)<\/text>/g;
+  let match;
+  while ((match = regex.exec(xml)) !== null) {
+    const start = parseFloat(match[1]);
+    const duration = match[2] ? parseFloat(match[2]) : 4;
+    const text = decodeHtmlEntities(match[3]).replace(/\s+/g, " ").trim();
+    if (text) items.push({ text, offset: start * 1000, duration: duration * 1000 });
+  }
+  return items;
+}
+
+function vttTimeToSeconds(timeText) {
+  const parts = timeText.split(":");
+  const seconds = parseFloat(parts[parts.length - 1].replace(",", "."));
+  const minutes = parts.length > 1 ? parseInt(parts[parts.length - 2], 10) : 0;
+  const hours = parts.length > 2 ? parseInt(parts[parts.length - 3], 10) : 0;
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function parseVttCaptions(vtt) {
+  const items = [];
+  const blocks = vtt.split(/\r?\n\s*\r?\n/);
+  for (const block of blocks) {
+    const lines = block.split(/\r?\n/);
+    const timeLine = lines.find(l => l.includes("-->"));
+    if (!timeLine) continue;
+    const start = vttTimeToSeconds(timeLine.split("-->")[0].trim());
+    const text = lines
+      .filter(l => !l.includes("-->") && l.trim() && !/^\d+$/.test(l.trim()))
+      .join(" ")
+      .replace(/<[^>]+>/g, "")
+      .trim();
+    if (text) items.push({ text, offset: start * 1000, duration: 4000 });
+  }
+  return items;
+}
+
+function parseCaptionBody(body) {
+  if (!body) return [];
+  const trimmed = body.trim();
+
+  if (trimmed.startsWith("{")) {
+    try {
+      const data = JSON.parse(trimmed);
+      const events = data.events || [];
+      return events
+        .filter(e => e.segs)
+        .map(e => ({
+          text: e.segs.map(s => s.utf8 || "").join(""),
+          offset: e.tStartMs || 0,
+          duration: e.dDurationMs || 2000
+        }))
+        .filter(i => i.text.trim().length > 0);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  if (trimmed.includes("<text")) return parseXmlCaptions(trimmed);
+  if (trimmed.includes("-->")) return parseVttCaptions(trimmed);
+  return [];
+}
+
+function parseManualTranscript(rawText) {
+  const lines = rawText
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  const items = [];
+  let fallbackStart = 0;
+
+  for (const line of lines) {
+    const match = line.match(/^(\d{1,2}:)?(\d{1,2}):(\d{2})\s*(.*)$/);
+
+    if (match) {
+      const hours = match[1] ? parseInt(match[1], 10) : 0;
+      const minutes = parseInt(match[2], 10);
+      const seconds = parseInt(match[3], 10);
+      const text = (match[4] || "").trim();
+      const start = hours * 3600 + minutes * 60 + seconds;
+
+      if (text) items.push({ text, offset: start * 1000, duration: 4000 });
+      fallbackStart = start + 4;
+    } else {
+      items.push({ text: line, offset: fallbackStart * 1000, duration: 4000 });
+      fallbackStart += 4;
+    }
+  }
+
+  return items;
+}
+
+async function fetchViaInnerTube(videoId) {
+  const clients = [
+    {
+      clientName: "ANDROID",
+      clientVersion: "19.09.37",
+      userAgent: "com.google.android.youtube/19.09.37 (Linux; U; Android 13) gzip"
+    },
+    {
+      clientName: "IOS",
+      clientVersion: "19.09.3",
+      userAgent: "com.google.ios.youtube/19.09.3 (iPhone16,2; U; CPU iOS 17_0 like Mac OS X)"
+    },
+    {
+      clientName: "WEB",
+      clientVersion: "2.20240101.00.00",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+  ];
+
+  for (const client of clients) {
+    try {
+      const response = await fetch(
+        "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": client.userAgent
+          },
+          body: JSON.stringify({
+            context: {
+              client: {
+                clientName: client.clientName,
+                clientVersion: client.clientVersion,
+                hl: "en"
+              }
+            },
+            videoId
+          })
+        }
+      );
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+
+      const tracks =
+        data &&
+        data.captions &&
+        data.captions.playerCaptionsTracklistRenderer &&
+        data.captions.playerCaptionsTracklistRenderer.captionTracks;
+
+      if (!tracks || !tracks.length) continue;
+
+      const track = tracks.find(t => !t.kind || t.kind !== "asr") || tracks[0];
+
+      if (!track.baseUrl) continue;
+
+      const separator = track.baseUrl.includes("?") ? "&" : "?";
+
+      const captionResponse = await fetch(track.baseUrl + separator + "fmt=json3");
+
+      if (!captionResponse.ok) continue;
+
+      const items = parseCaptionBody(await captionResponse.text());
+
+      if (items.length) return items;
+    } catch (error) {
+      // try next client
+    }
+  }
+
+  return null;
+}
+
+async function fetchViaLegacyTimedText(videoId) {
+  const langs = ["en", "hi", "ur", "ar"];
+
+  for (const lang of langs) {
+    try {
+      const response = await fetch(
+        `https://video.google.com/timedtext?v=${videoId}&lang=${lang}`,
+        { headers: { "User-Agent": "Mozilla/5.0" } }
+      );
+
+      if (!response.ok) continue;
+
+      const items = parseCaptionBody(await response.text());
+
+      if (items.length) return items;
+    } catch (error) {
+      // try next language
+    }
+  }
+
+  return null;
+}
+
+async function fetchViaPiped(videoId) {
+  const instances = [
+    "https://pipedapi.kavin.rocks",
+    "https://pipedapi.adminforge.de",
+    "https://api.piped.private.coffee",
+    "https://pipedapi.reallyaweso.me"
+  ];
+
+  for (const base of instances) {
+    try {
+      const response = await fetch(base + "/streams/" + videoId, {
+        headers: { "User-Agent": "Mozilla/5.0" }
+      });
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const subs = data.subtitles || [];
+      const sub = subs.find(s => !s.autoGenerated) || subs[0];
+
+      if (!sub || !sub.url) continue;
+
+      const capRes = await fetch(sub.url, {
+        headers: { "User-Agent": "Mozilla/5.0" }
+      });
+
+      if (!capRes.ok) continue;
+
+      const items = parseCaptionBody(await capRes.text());
+
+      if (items.length) return items;
+    } catch (error) {
+      // try next instance
+    }
+  }
+
+  return null;
+}
+
+async function fetchViaInvidious(videoId) {
+  const instances = [
+    "https://inv.nadeko.net",
+    "https://invidious.f5.si",
+    "https://iv.melmac.space",
+    "https://invidious.private.coffee"
+  ];
+
+  for (const base of instances) {
+    try {
+      const response = await fetch(base + "/api/v1/captions/" + videoId + "?lang=en", {
+        headers: { "User-Agent": "Mozilla/5.0" }
+      });
+
+      if (!response.ok) continue;
+
+      const items = parseCaptionBody(await response.text());
+
+      if (items.length) return items;
+    } catch (error) {
+      // try next instance
+    }
+  }
+
+  return null;
+}
+
+async function getTranscript(videoId) {
+  // Method 1: npm package
+  try {
+    const mod = await import("youtube-transcript");
 
     const YoutubeTranscript =
       mod.YoutubeTranscript ||
@@ -512,26 +785,36 @@ async function getTranscript(videoId) {
     console.log("Method 1 failed:", error.message);
   }
 
-  // Method 2: YouTube InnerTube API (Android/iOS/Web)
+  // Method 2: InnerTube API
   try {
-    const innerTubeResult = await fetchViaInnerTube(videoId);
-
-    if (innerTubeResult && innerTubeResult.length) {
-      return innerTubeResult;
-    }
+    const r = await fetchViaInnerTube(videoId);
+    if (r && r.length) return r;
   } catch (error) {
     console.log("Method 2 failed:", error.message);
   }
 
-  // Method 3: legacy timedtext endpoint
+  // Method 3: legacy timedtext
   try {
-    const legacyResult = await fetchViaLegacyTimedText(videoId);
-
-    if (legacyResult && legacyResult.length) {
-      return legacyResult;
-    }
+    const r = await fetchViaLegacyTimedText(videoId);
+    if (r && r.length) return r;
   } catch (error) {
     console.log("Method 3 failed:", error.message);
+  }
+
+  // Method 4: Piped mirrors
+  try {
+    const r = await fetchViaPiped(videoId);
+    if (r && r.length) return r;
+  } catch (error) {
+    console.log("Method 4 failed:", error.message);
+  }
+
+  // Method 5: Invidious mirrors
+  try {
+    const r = await fetchViaInvidious(videoId);
+    if (r && r.length) return r;
+  } catch (error) {
+    console.log("Method 5 failed:", error.message);
   }
 
   throw new Error("No captions found");
